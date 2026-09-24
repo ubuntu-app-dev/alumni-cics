@@ -261,3 +261,33 @@ $$;
 
 revoke all on function public.get_admin_summary() from public;
 grant execute on function public.get_admin_summary() to anon, authenticated;
+
+create or replace function public.get_alumni_list()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with latest as (
+    select distinct on (alumni_id) alumni_id, employment_status
+    from public.tracer_study_responses
+    order by alumni_id, submitted_at desc
+  )
+  select coalesce(jsonb_agg(
+    jsonb_build_object(
+      'name', coalesce(first_name || ' ' || last_name, email),
+      'email', email,
+      'course', coalesce(degree_earned, 'Unknown'),
+      'year', coalesce(extract(year from graduation_date)::text, 'Unknown'),
+      'status', coalesce(l.employment_status, 'No Data'),
+      'initials', upper(substring(coalesce(first_name, email) from 1 for 1) || substring(coalesce(last_name, '') from 1 for 1)),
+      'tone', 'bg-blue-100 text-blue-700'
+    ) order by p.updated_at desc
+  ), '[]'::jsonb)
+  from public.alumni_profiles p
+  left join latest l on l.alumni_id = p.id;
+$$;
+
+revoke all on function public.get_alumni_list() from public;
+grant execute on function public.get_alumni_list() to anon, authenticated;
